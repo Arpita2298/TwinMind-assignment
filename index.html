@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TwinMind Live Suggestions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">TwinMind</p>
+          <h1>Live Suggestions Web App</h1>
+        </div>
+        <div class="topbar-status-group">
+          <div class="connection-pill">
+            <span class="connection-dot" id="connectionDot"></span>
+            <span id="connectionLabel">Groq key not saved</span>
+          </div>
+          <div class="connection-pill secondary-pill">
+            <span>Models</span>
+            <strong>Whisper Large V3 + GPT-OSS 120B</strong>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button id="settingsButton" class="ghost-button" type="button">Settings</button>
+          <button id="exportButton" class="primary-button" type="button">Export Session</button>
+        </div>
+      </header>
+
+      <main class="workspace-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <span>1. Mic &amp; Transcript</span>
+            <span id="micStatusLabel" class="status-chip idle">Idle</span>
+          </div>
+
+          <div class="panel-body transcript-panel">
+            <div class="record-row">
+              <button id="recordButton" class="record-button" type="button" aria-live="polite">
+                <span class="record-button-dot"></span>
+              </button>
+              <div class="record-summary">
+                <div class="panel-callout">
+                  Click mic to start. Transcript appends every ~30s while recording.
+                </div>
+                <div class="metric-strip">
+                  <div class="metric-card">
+                    <span class="metric-label">Chunk cadence</span>
+                    <strong id="chunkCadenceLabel">30s</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-label">Next transcript flush</span>
+                    <strong id="nextFlushLabel">Waiting</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="helper-card">
+              Transcript chunks are transcribed with Groq Whisper Large V3 and appended with timestamps.
+              Use the mic button to start/stop. Manual refresh flushes the current in-progress chunk.
+            </div>
+
+            <div id="transcriptList" class="transcript-list empty-state">
+              No transcript yet — start the mic.
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <span>2. Live Suggestions</span>
+            <span id="batchCountLabel" class="status-chip">0 batches</span>
+          </div>
+
+          <div class="panel-toolbar">
+            <button id="refreshButton" class="ghost-button" type="button">Reload suggestions</button>
+            <div class="toolbar-stack">
+              <span id="refreshMeta" class="toolbar-meta">Ready to start</span>
+              <span id="refreshCountdown" class="toolbar-meta">auto-refresh in 30s</span>
+            </div>
+          </div>
+
+          <div class="panel-body suggestions-panel">
+            <div class="helper-card">
+              Each reload creates <strong>exactly 3 fresh suggestions</strong> from recent transcript
+              context. Suggestions can be questions to ask, talking points, answers, fact checks, or
+              clarifications.
+            </div>
+
+            <div id="suggestionBatches" class="suggestion-batches empty-state">
+              Suggestions appear here once recording starts.
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <span>3. Chat (Detailed Answers)</span>
+            <span class="status-chip">Session-only</span>
+          </div>
+
+          <div class="panel-body chat-panel">
+            <div class="helper-card">
+              Clicking a suggestion adds it to this chat and generates a detailed answer with a larger
+              transcript context window. Users can also type their own questions.
+            </div>
+
+            <div class="metric-strip">
+              <div class="metric-card">
+                <span class="metric-label">Last suggestions latency</span>
+                <strong id="suggestionsLatencyLabel">-</strong>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Last chat latency</span>
+                <strong id="chatLatencyLabel">-</strong>
+              </div>
+            </div>
+
+            <div id="chatList" class="chat-list empty-state">
+              Click a suggestion or type a question below.
+            </div>
+
+            <form id="chatForm" class="chat-form">
+              <input
+                id="chatInput"
+                class="chat-input"
+                name="question"
+                type="text"
+                autocomplete="off"
+                placeholder="Ask anything..."
+              />
+              <button id="sendButton" class="primary-button" type="submit">Send</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="settingsModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Configuration</p>
+            <h2 id="settingsTitle">Groq Settings &amp; Prompts</h2>
+          </div>
+          <button id="closeSettingsButton" class="ghost-button" type="button">Close</button>
+        </div>
+
+        <form id="settingsForm" class="settings-form">
+          <label class="field">
+            <span>Groq API key</span>
+            <input id="apiKeyInput" name="apiKey" type="password" placeholder="gsk_..." />
+            <small class="field-help">Saved in your browser only via localStorage. It is not committed to the repo.</small>
+          </label>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Suggestion transcript window</span>
+              <input id="suggestionContextWindowInput" name="suggestionContextWindow" type="number" min="1" max="30" />
+            </label>
+            <label class="field">
+              <span>Answer transcript window</span>
+              <input id="answerContextWindowInput" name="answerContextWindow" type="number" min="1" max="50" />
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Suggestion refresh interval (seconds)</span>
+              <input id="refreshIntervalInput" name="refreshIntervalSeconds" type="number" min="10" max="120" />
+            </label>
+            <label class="field">
+              <span>Transcription chunk size (seconds)</span>
+              <input id="chunkSecondsInput" name="chunkSeconds" type="number" min="10" max="60" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Live suggestion prompt</span>
+            <textarea id="suggestionPromptInput" name="suggestionPrompt" rows="9"></textarea>
+          </label>
+
+          <label class="field">
+            <span>Detailed answer prompt</span>
+            <textarea id="answerPromptInput" name="answerPrompt" rows="8"></textarea>
+          </label>
+
+          <label class="field">
+            <span>Direct chat prompt</span>
+            <textarea id="chatPromptInput" name="chatPrompt" rows="8"></textarea>
+          </label>
+
+          <div class="modal-actions">
+            <button id="resetSettingsButton" class="ghost-button" type="button">Reset defaults</button>
+            <button class="primary-button" type="submit">Save settings</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <template id="transcriptItemTemplate">
+      <article class="transcript-item">
+        <div class="transcript-meta"></div>
+        <p class="transcript-text"></p>
+      </article>
+    </template>
+
+    <template id="suggestionBatchTemplate">
+      <section class="suggestion-batch">
+        <div class="suggestion-batch-header">
+          <span class="suggestion-batch-title"></span>
+          <span class="suggestion-batch-meta"></span>
+        </div>
+        <div class="suggestion-grid"></div>
+      </section>
+    </template>
+
+    <template id="suggestionCardTemplate">
+      <button class="suggestion-card" type="button">
+        <div class="suggestion-topline">
+          <span class="suggestion-kind"></span>
+          <span class="suggestion-time"></span>
+        </div>
+        <h3 class="suggestion-title"></h3>
+        <p class="suggestion-preview"></p>
+      </button>
+    </template>
+
+    <template id="chatItemTemplate">
+      <article class="chat-item">
+        <div class="chat-meta"></div>
+        <p class="chat-text"></p>
+      </article>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
